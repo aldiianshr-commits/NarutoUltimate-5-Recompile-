@@ -1,0 +1,157 @@
+name: Build NarutoUltimate 5 APK
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**/*.md", "docs/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  NDK_VERSION: "29.0.14206865"
+  CMAKE_VERSION: "3.31.6"
+
+jobs:
+  # Fast lane (~5 min): JVM unit tests (ISO scanner, settings mapping, input model) and a
+  # compile of all Kotlin/Java/resources without the native core.
+  tests:
+    name: Unit tests + app compile
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        run: ./gradlew --stacktrace -Pnaruto5.skipNative=true :app:testDebugUnitTest
+
+      - name: Compile app (no native core)
+        run: ./gradlew --stacktrace -Pnaruto5.skipNative=true :app:assembleDebug
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: app/build/reports/tests/
+          if-no-files-found: ignore
+
+  # Full build: compiles the ARMSX2 PS2 core (EE/IOP/VU ARM64 JIT, GS Vulkan/GL, SPU2...) with
+  # the NDK and packages the installable, signed release APK.
+  apk:
+    name: Release APK (arm64-v8a, native core)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk/2* /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 1
+
+      - name: Core revision
+        id: core
+        run: |
+          echo "sha=$(git -C core rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "short=$(git -C core rev-parse --short=8 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install NDK + CMake
+        run: yes | sdkmanager "ndk;${NDK_VERSION}" "cmake;${CMAKE_VERSION}" > /dev/null || true
+
+      - name: Fetch shaderc third-party sources
+        run: python3 core/platforms/android/app/src/main/cpp/3rdparty/shaderc/utils/git-sync-deps
+
+      - name: Install Rust Android target (librashader)
+        run: rustup target add aarch64-linux-android
+
+      - name: Install ccache
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ccache
+
+      - name: ccache cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ steps.core.outputs.sha }}-${{ hashFiles('app/build.gradle.kts') }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ steps.core.outputs.sha }}-${{ hashFiles('app/build.gradle.kts') }}-
+            ccache-${{ steps.core.outputs.sha }}-
+            ccache-
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build release APK
+        env:
+          CCACHE_DIR: /home/runner/.cache/ccache
+          CCACHE_MAXSIZE: 3G
+          CCACHE_BASEDIR: ${{ github.workspace }}
+          CCACHE_COMPRESS: "true"
+        run: |
+          ccache -z
+          ./gradlew --stacktrace --continue \
+            -Pnaruto5.ccache=true \
+            -Pnaruto5.versionCode=${{ github.run_number }} \
+            -Pnaruto5.versionName=1.0.${{ github.run_number }} \
+            -Pnaruto5.coreCommit=${{ steps.core.outputs.short }} \
+            :app:assembleRelease
+          ccache -s
+
+      - name: Collect APK
+        id: apk
+        run: |
+          APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          test -n "$APK"
+          OUT="NarutoUltimate5-1.0.${{ github.run_number }}-arm64.apk"
+          mkdir -p dist && cp "$APK" "dist/$OUT"
+          echo "name=$OUT" >> "$GITHUB_OUTPUT"
+          echo "### APK" >> "$GITHUB_STEP_SUMMARY"
+          ls -l dist >> "$GITHUB_STEP_SUMMARY"
+          unzip -l "dist/$OUT" | grep -E 'lib/arm64-v8a|classes|AndroidManifest' >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.apk.outputs.name }}
+          path: dist/*.apk
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: NarutoUltimate 5 v1.0.${{ github.run_number }}
+          body: |
+            Build otomatis dari commit ${{ github.sha }} (core ARMSX2 ${{ steps.core.outputs.short }}).
+            Pasang APK di bawah pada perangkat Android ARM64 (target: Xiaomi Pad 6).
+            File game (ISO Naruto Shippuden: Ultimate Ninja 5) dan BIOS PS2 Anda sendiri wajib disediakan.
+          files: dist/*.apk
+          make_latest: true

@@ -1,0 +1,4 @@
+[submodule "core"]
+	path = core
+	url = https://github.com/ARMSX2/ARMSX2.git
+	shallow = true
