@@ -394,7 +394,17 @@ class EmulationActivity : ComponentActivity(), SurfaceHolder.Callback, NativeApp
     }
 
     // ---- input ----------------------------------------------------------------------------
+    private val padDown = HashSet<Int>()
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // START + SELECT together opens the pause menu (many pads never deliver Home/Mode).
+        if (KeyEvent.isGamepadButton(event.keyCode)) {
+            if (event.action == KeyEvent.ACTION_DOWN) padDown += event.keyCode else padDown -= event.keyCode
+            if (event.action == KeyEvent.ACTION_DOWN && menu == null && editor == null &&
+                KeyEvent.KEYCODE_BUTTON_START in padDown && KeyEvent.KEYCODE_BUTTON_SELECT in padDown) {
+                padDown.clear(); gamepad.releaseAll(); openMenu(); return true
+            }
+        }
         if (menu == null && editor == null && gamepad.onKey(event)) {
             if (touch.visibility == View.VISIBLE && event.action == KeyEvent.ACTION_DOWN) touch.visibility = View.GONE
             return true

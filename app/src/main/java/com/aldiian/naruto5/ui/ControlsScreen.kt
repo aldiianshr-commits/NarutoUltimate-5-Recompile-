@@ -61,7 +61,7 @@ fun ControlsScreen(s: LauncherState, onEditLayout: () -> Unit, startCapture: ((I
                 note = "Membaca sumbu trigger analog gamepad sebagai tombol bertekanan PS2.")
             ToggleRow("Getaran (rumble)", m.rumble, { s.updateGamepad(m.copy(rumble = it)) },
                 note = "Motor DualShock 2 dari game diteruskan ke motor gamepad (atau perangkat bila gamepad tidak punya).")
-            Text("Analog kiri/kanan dan hat D-pad dibaca otomatis dari sumbu gamepad.", style = MaterialTheme.typography.bodySmall,
+            Text("Analog kiri/kanan dan hat D-pad dibaca otomatis dari sumbu gamepad. Dalam game: START + SELECT bersamaan = menu jeda.", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             PadKey.bindable.forEach { key ->
                 val bound = m.buttons.filterValues { it == key }.keys.firstOrNull()
