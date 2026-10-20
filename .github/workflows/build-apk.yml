@@ -161,3 +161,46 @@ jobs:
             File game (ISO Naruto Shippuden: Ultimate Ninja 5) dan BIOS PS2 Anda sendiri wajib disediakan.
           files: dist/*.apk
           make_latest: true
+
+  # Installs the release APK on an Android emulator (x86_64 image with ARM64 translation) and
+  # checks that the native ARMSX2 core loads and initialises, that a synthetic SLES-55605 disc is
+  # detected/validated (and known to the core's GameDB) and that a fake BIOS is rejected.
+  # Screenshots of every launcher tab are uploaded as an artifact.
+  smoke:
+    name: Device smoke test (emulator)
+    needs: apk
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: NarutoUltimate5-*
+          merge-multiple: true
+          path: dist
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+
+      - name: Run smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          ram-size: 4096M
+          disk-size: 6000M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: bash tools/smoke-test.sh "$(ls dist/*.apk | head -1)"
+
+      - name: Upload smoke results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-results
+          path: smoke-out/
+          if-no-files-found: ignore

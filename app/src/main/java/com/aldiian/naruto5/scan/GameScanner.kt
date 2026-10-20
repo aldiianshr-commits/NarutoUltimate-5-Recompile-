@@ -103,7 +103,10 @@ object GameScanner {
     private fun build(name: String, location: String, size: Long, info: DiscInfo, serial: String?): ScannedGame {
         val compat = if (serial != null && !NativeApp.hasNoNativeBinary) runCatching { NativeApp.getCompatibilityForSerial(serial) }.getOrDefault(0) else 0
         val title = KnownGames.find(serial)?.title ?: info.volumeId?.takeIf { it.isNotBlank() } ?: name.substringBeforeLast('.')
-        return ScannedGame(name, location, size, info, serial, KnownGames.classify(serial), compat, title)
+        val g = ScannedGame(name, location, size, info, serial, KnownGames.classify(serial), compat, title)
+        AppLog.i("Game: $name serial=${serial ?: "?"} format=${info.format.name} match=${g.match} compat=$compat playable=${g.playable}" +
+            info.findings.filter { it.severity != Severity.OK }.joinToString("") { " | ${it.severity}: ${it.message}" })
+        return g
     }
 
     private fun rank(g: ScannedGame): Int = when (g.match) {

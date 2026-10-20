@@ -61,7 +61,7 @@ object BiosManager {
             runCatching {
                 if (!dest.isFile || dest.length() != src.length()) src.copyTo(dest, overwrite = true)
                 accept(prefs, dest)
-            }.getOrNull()
+            }.onFailure { AppLog.w("BIOS ditolak: ${src.path} — ${it.message}") }.getOrNull()
         }
     }
 
