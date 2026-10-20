@@ -106,7 +106,11 @@ jobs:
             ccache-${{ steps.core.outputs.sha }}-
             ccache-
 
+      # The core submodule vendors third-party Android sample projects with their own wrapper
+      # jars; our wrapper is validated in the `tests` job, so skip the repo-wide scan here.
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          validate-wrappers: false
 
       - name: Build release APK
         env:
