@@ -54,11 +54,20 @@
         <activity
             android:name=".emu.EmulationActivity"
             android:exported="false"
+            android:process=":emu"
             android:launchMode="singleTask"
             android:screenOrientation="sensorLandscape"
             android:resizeableActivity="false"
             android:theme="@style/Theme.Naruto5.Fullscreen"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|touchscreen"
+            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
+
+        <activity
+            android:name=".ui.LayoutEditorActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@style/Theme.Naruto5.Fullscreen"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <provider

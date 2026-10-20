@@ -2,7 +2,7 @@ name: Build NarutoUltimate 5 APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
     paths-ignore: ["**/*.md", "docs/**"]
   pull_request:
   workflow_dispatch:
@@ -56,6 +56,8 @@ jobs:
   # the NDK and packages the installable, signed release APK.
   apk:
     name: Release APK (arm64-v8a, native core)
+    # The ~1 h native build runs for main, PRs and manual runs; `dev` pushes get the fast lane only.
+    if: github.ref != 'refs/heads/dev'
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
