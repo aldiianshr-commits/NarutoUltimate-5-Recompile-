@@ -100,6 +100,9 @@ class MainActivity : ComponentActivity() {
                     val had = state.allFilesAccess
                     state.refreshStorage(); state.reloadControls(); state.refreshSaves()
                     if (!had && state.allFilesAccess) state.rescan()
+                    val am = getSystemService(android.app.ActivityManager::class.java)
+                    val emuAlive = am?.runningAppProcesses?.any { it.processName == "$packageName:emu" } == true
+                    state.checkAbnormalExit(emuAlive)
                 }
             }
             owner.lifecycle.addObserver(obs)

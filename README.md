@@ -23,7 +23,9 @@ ARM64** untuk EE (MIPS R5900), IOP (R3000), VU0 dan VU1 — yang dikompilasi dar
 
 ## Unduh & pasang
 
-1. Buka tab **Releases** (atau **Actions › artefak build**) lalu unduh `NarutoUltimate5-<versi>-arm64.apk`.
+1. Buka tab **Releases** lalu unduh:
+   - `NarutoUltimate5-<versi>-arm64.apk` — **utama**, dioptimalkan untuk Xiaomi Pad 6 / Snapdragon 870 (ARMv8.2).
+   - `NarutoUltimate5-<versi>-arm64-armv8.0-compat.apk` — cadangan untuk CPU ARMv8.0 lama (Cortex-A53/A72/A73).
 2. Pasang APK (izinkan "instal dari sumber tak dikenal").
 3. Siapkan file **milik Anda sendiri**:
    - Image game: `/storage/emulated/0/Naruto5/` — `.iso`, `.bin`, `.chd`, `.cso`, `.zso`, `.gz`.
@@ -170,6 +172,13 @@ CI (`.github/workflows/build-apk.yml`): job *tests* (tes unit + kompilasi app) d
 | Build | Kompilasi core ARMSX2 penuh dengan NDK + APK release bertanda tangan | job CI *apk* |
 | Perangkat (emulator Android 14 x86_64 + translasi ARM64) | APK terpasang; `libemucore_4k.so` termuat; `NativeApp.initialize` + resource core; ISO sintetis terdeteksi `SLES-55605`, valid, dikenal GameDB core; BIOS palsu ditolak parser core; folder memcard/state core = `/storage/emulated/0/Naruto5/Save`; screenshot semua tab; fase boot VM (PLAY → `EmulationActivity` → `runVMThread`) dicatat sebagai info | `tools/smoke-test.sh`, job CI *smoke*; hasil + screenshot dilampirkan di setiap GitHub Release |
 
+Hasil fase boot di emulator x86_64: PLAY → `EmulationActivity` (proses `:emu`) → pengaturan
+diterapkan → `runVMThread` berjalan, lalu proses berhenti dengan SIGILL di thread VU1 (MTVU) yang
+dilempar oleh penerjemah biner ARM64→x86 emulator (sama untuk build ARMv8.2 maupun ARMv8.0). JIT
+ARMSX2 memang tidak ditujukan untuk berjalan di bawah translasi, jadi tahap ini **hanya bisa
+dibuktikan di perangkat ARM64 asli**. Launcher mendeteksi keluarnya emulator yang tidak normal dan
+mengarahkan pemain ke Diagnostik.
+
 Tes perangkat memakai image dan BIOS **sintetis** (`tools/make_test_iso.py`, `tools/make_test_bios.py`),
 bukan data Sony/Bandai Namco, sehingga tidak bisa membuktikan gameplay.
 
@@ -196,7 +205,8 @@ core/        submodule ARMSX2 (di-pin ke commit tertentu)
 - Bukan static recompilation (lihat atas). Performa bergantung pada JIT ARMSX2 dan driver GPU.
 - Belum diverifikasi oleh saya di Xiaomi Pad 6 dengan game asli (tidak ada perangkat/game/BIOS di
   lingkungan build). Laporkan hasil via log diagnostik.
-- Hanya `arm64-v8a`, Android 10+ (API 29). Build default membutuhkan CPU ARMv8.2 (Snapdragon 845+).
+- Hanya `arm64-v8a`, Android 10+ (API 29). APK utama membutuhkan CPU ARMv8.2 + FP16 + DotProd
+  (Snapdragon 855/865/870 dan yang lebih baru); gunakan APK `armv8.0-compat` untuk CPU lebih lama.
 - Patch widescreen hanya untuk SLES-55605; versi Jepang tetap 4:3.
 - Bayangan dan MSAA tidak bisa diatur (tidak ada di emulator).
 - Batas FPS 30/45 membatasi frame yang ditampilkan; logika game tetap 50/60 Hz.

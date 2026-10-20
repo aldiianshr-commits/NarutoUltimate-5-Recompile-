@@ -80,6 +80,9 @@ object AppLog {
         return f
     }
 
+    /** Marker present while a VM session runs; left behind if the :emu process dies abruptly. */
+    fun sessionMarker(ctx: Context) = File(Paths.logsDir(ctx), "emu-session.txt")
+
     fun crashFile(ctx: Context) = File(Paths.logsDir(ctx), "last-crash.txt")
     fun lastCrash(ctx: Context): String? = crashFile(ctx).takeIf { it.isFile }?.readText()
 }

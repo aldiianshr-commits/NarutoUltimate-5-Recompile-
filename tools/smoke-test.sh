@@ -99,6 +99,11 @@ info "VM exited with a reported error" "VM selesai"
 grep -E "Fatal signal|SIGILL|SIGSEGV|backtrace" "$OUT/logcat.txt" | head -5 | while read -r l; do note "INFO crash line: $l"; done
 { echo "---- native crash backtrace (if any) ----"; grep -E " F/DEBUG" "$OUT/logcat.txt" | head -60; } >> "$SUMMARY"
 adb shell pidof $PKG:emu > "$OUT/emu-pid.txt" || true
+# If the emulator process died, the launcher must say so when it comes back to the front.
+adb shell am start -W -n $PKG/.ui.MainActivity >/dev/null; sleep 8
+adb exec-out screencap -p > "$OUT/8-kembali-ke-launcher.png"
+adb logcat -d -v time > "$OUT/logcat.txt"
+info "launcher reported an abrupt emulator exit" "Sesi emulator berakhir mendadak"
 
 {
   echo; echo "abilist: $(cat "$OUT/abilist.txt")"

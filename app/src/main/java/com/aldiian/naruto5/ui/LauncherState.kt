@@ -88,6 +88,18 @@ class LauncherState(private val ctx: Context, private val scope: CoroutineScope)
 
     fun refreshStorage() { allFilesAccess = Paths.hasAllFilesAccess() }
 
+    /**
+     * If the emulator process died without a clean exit (native crash, OOM kill), its session
+     * marker is still there: tell the player and point at the diagnostics log.
+     */
+    fun checkAbnormalExit(emuRunning: Boolean) {
+        val marker = AppLog.sessionMarker(ctx)
+        if (!marker.isFile || emuRunning) return
+        marker.delete()
+        AppLog.e("Sesi emulator berakhir mendadak (crash native atau dihentikan sistem)")
+        message = "Emulator berhenti mendadak. Buka Diagnostik › Ekspor & bagikan log untuk detailnya."
+    }
+
     fun rescan() = work("Memindai game") {
         refreshStorage()
         if (coreReady && allFilesAccess && bios == null) {

@@ -207,6 +207,7 @@ class EmulationActivity : ComponentActivity(), SurfaceHolder.Callback, NativeApp
     private fun maybeStartVm() {
         if (emuThread != null || !surfaceReady || !CoreRuntime.initialized || exiting) return
         AppLog.i("Boot VM: $path (serial=$serial, renderer=${settings.renderer.label})")
+        runCatching { AppLog.sessionMarker(this).writeText("${System.currentTimeMillis()}\n$path\n") }
         emuThread = thread(name = "n5-emu", priority = Thread.MAX_PRIORITY) {
             val ok = runCatching { NativeApp.runVMThread(path) }.onFailure { AppLog.e("runVMThread exception", it) }.getOrDefault(false)
             val err = runCatching { NativeApp.getLastBootError() }.getOrDefault("")
@@ -242,6 +243,7 @@ class EmulationActivity : ComponentActivity(), SurfaceHolder.Callback, NativeApp
 
     private fun onVmExited(ok: Boolean, err: String) {
         vmRunning = false
+        AppLog.sessionMarker(this).delete()
         if (exiting) return
         if (!ok || err.isNotBlank()) {
             showError("Game gagal dijalankan.\n\n${err.ifBlank { "Core menghentikan VM saat boot (periksa BIOS dan file game)." }}")
@@ -363,6 +365,7 @@ class EmulationActivity : ComponentActivity(), SurfaceHolder.Callback, NativeApp
 
     private fun finishAndKill() {
         exiting = true
+        AppLog.sessionMarker(this).delete()
         finish()
         ui.postDelayed({ android.os.Process.killProcess(android.os.Process.myPid()) }, 400)
     }
