@@ -41,7 +41,7 @@ fun SettingsScreen(s: LauncherState, onImportDriver: () -> Unit) {
                 enabled = serial != null,
             )
             ChoiceRow("Preset grafis", Preset.entries, cfg.preset, { it.label }, { s.updateSettings(cfg.withPreset(it)) },
-                note = "Diuji untuk Xiaomi Pad 6 (Snapdragon 870 / Adreno 650): Medium = 720p 60 FPS stabil; High/Ultra butuh perangkat tetap dingin.")
+                note = "Rekomendasi awal untuk Xiaomi Pad 6 (Snapdragon 870 / Adreno 650): mulai dari Medium (720p); naikkan ke High/Ultra bila FPS tetap penuh dan perangkat tidak panas.")
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { s.resetSettings() }) { Text("Reset to Default") }
             }

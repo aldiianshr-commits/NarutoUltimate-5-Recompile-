@@ -41,20 +41,37 @@ object CoreRuntime {
         val gpu = GpuInfo.get(prefs)
         if (gpu.renderer.isNotBlank()) NativeApp.setAutoRendererGpuStrings(gpu.vendor, gpu.renderer, gpu.version)
 
-        NativeApp.initialize(dataRoot.absolutePath, Paths.biosDir(ctx).absolutePath, Build.VERSION.SDK_INT)
+        // Folders: memory cards and save states go to the user-visible save folder. The core
+        // reads [Folders] only inside initialize (VMManager::Internal::LoadStartupSettings), so
+        // when the INI already exists the paths are written into it *before* initialize.
+        val folders = linkedMapOf(
+            "Bios" to Paths.biosDir(ctx).absolutePath,
+            "MemoryCards" to Paths.memcardDir(ctx).absolutePath,
+            "Savestates" to Paths.statesDir(ctx).absolutePath,
+        )
+        val ini = File(dataRoot, "PCSX2-Android.ini")
+        val iniExisted = ini.isFile && ini.length() > 0
+        if (iniExisted) runCatching { ini.writeText(IniFile.update(ini.readText(), "Folders", folders)) }
+            .onFailure { AppLog.w("INI tidak bisa diperbarui: ${it.message}") }
+
+        val biosDir = Paths.biosDir(ctx).absolutePath
+        NativeApp.initialize(dataRoot.absolutePath, biosDir, Build.VERSION.SDK_INT)
         // Same JNI bring-up the ARMSX2 frontend performs after initialize: SDL's Java side must be
         // wired even though this app feeds the pad itself (SDL is linked into the core).
         runCatching {
             org.libsdl.app.SDLControllerManager.nativeSetupJNI()
             org.libsdl.app.SDLControllerManager.initialize()
         }.onFailure { AppLog.w("SDL JNI setup: ${it.message}") }
-        // Folders: memory cards and save states go to the user-visible save folder.
-        set("Folders", "Bios", "string", Paths.biosDir(ctx).absolutePath)
-        set("Folders", "MemoryCards", "string", Paths.memcardDir(ctx).absolutePath)
-        set("Folders", "Savestates", "string", Paths.statesDir(ctx).absolutePath)
+        folders.forEach { (k, v) -> set("Folders", k, "string", v) }
         set("MemoryCards", "Slot1_Enable", "bool", "true")
         NativeApp.commitSettings()
+        if (!iniExisted) {
+            // Very first start: the core has just seeded its defaults; run its startup settings
+            // load once more so the folders above are in effect for this process too.
+            NativeApp.initialize(dataRoot.absolutePath, biosDir, Build.VERSION.SDK_INT)
+        }
         initialized = true
+        AppLog.i("Folder core: memcards=${folders["MemoryCards"]} states=${folders["Savestates"]}")
         AppLog.i("Core diinisialisasi: ${NativeApp.getBuildVersion()} data=${dataRoot.path}")
         return true
     }

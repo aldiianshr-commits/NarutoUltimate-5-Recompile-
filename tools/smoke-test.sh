@@ -61,15 +61,41 @@ check "scanner found the disc as SLES-55605" "Game: Naruto5-smoke.iso serial=SLE
 check "disc validated as playable" "serial=SLES-55605 .*playable=true"
 check "core GameDB knows UN5 (compat > 0)" "serial=SLES-55605 .*compat=[1-6]"
 check "core BIOS parser rejected an invalid BIOS" "BIOS ditolak"
+check "core uses /storage/emulated/0/Naruto5/Save for memory cards" "MemoryCards Directory: /storage/emulated/0/Naruto5/Save/memcards"
+check "core uses /storage/emulated/0/Naruto5/Save for save states" "Savestates Directory: /storage/emulated/0/Naruto5/Save/states"
 if grep -q "Core native gagal dimuat" "$OUT/logcat.txt"; then note "FAIL: native library failed to load"; fail=1; fi
 if grep -E "FATAL EXCEPTION|Fatal signal" "$OUT/logcat.txt" | grep -q -i naruto5; then note "FAIL: crash"; fail=1; fi
 if [ -s "$OUT/pid.txt" ]; then note "PASS: app still running (pid $(cat "$OUT/pid.txt"))"; else note "FAIL: app process died"; fail=1; fi
+# ---- phase 2: VM boot path with a structurally valid, empty BIOS (tools/make_test_bios.py) ----
+# Informational only: the image contains no BIOS code, and the emulator runs the ARM64 JIT under
+# x86 binary translation, so the VM is not expected to show anything. What this exercises is the
+# real integration: EmulationActivity in the :emu process, surface hand-off, settings push,
+# runVMThread, VMManager init with BIOS + disc, GS device creation, and orderly error reporting.
+python3 tools/make_test_bios.py "$OUT/smoke-bios.bin"
+adb push "$OUT/smoke-bios.bin" /sdcard/Naruto5/BIOS/smoke-bios.bin
+tap_text "Beranda"; sleep 3
+tap_text "Pindai ulang"; sleep 15
+adb exec-out screencap -p > "$OUT/6-beranda-siap.png"
+adb logcat -d -v time > "$OUT/logcat.txt"
+check "core accepted a structurally valid BIOS image" "BIOS dipasang"
+tap_text "▶  PLAY"; sleep 45
+adb exec-out screencap -p > "$OUT/7-emulasi.png"
+adb logcat -d -v time > "$OUT/logcat.txt"
+info() { if grep -q -E "$2" "$OUT/logcat.txt"; then note "INFO yes: $1"; else note "INFO no: $1"; fi; }
+info "PLAY started EmulationActivity and pushed settings" "Pengaturan diterapkan"
+info "runVMThread entered (ARMSX2-START)" "ARMSX2-START|Boot VM"
+info "VMManager initialised the VM (VM INIT)" "VM INIT"
+info "VM produced frames" "Game berjalan"
+info "VM exited with a reported error" "VM selesai"
+grep -E "Fatal signal|SIGILL|SIGSEGV|backtrace" "$OUT/logcat.txt" | head -5 | while read -r l; do note "INFO crash line: $l"; done
+adb shell pidof $PKG:emu > "$OUT/emu-pid.txt" || true
+
 {
   echo; echo "abilist: $(cat "$OUT/abilist.txt")"
   echo "---- app log (tag Naruto5) ----"
   grep -E " I/Naruto5| W/Naruto5| E/Naruto5" "$OUT/logcat.txt" | head -60
   echo "---- core log excerpt ----"
-  grep -E "ARMSX2|PCSX2|GameDB|Resources|BIOS Directory|MemoryCards Directory|Savestates Directory" "$OUT/logcat.txt" | head -40
+  grep -E "ARMSX2|PCSX2|GameDB|Resources|BIOS|MemoryCards Directory|Savestates Directory|@@ANDROID|VM INIT|Renderer|Vulkan|OpenGL|GS" "$OUT/logcat.txt" | head -120
 } >> "$SUMMARY"
 cat "$SUMMARY"
 exit $fail
