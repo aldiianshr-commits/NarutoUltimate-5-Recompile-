@@ -9,6 +9,7 @@
 # and the JIT is not meant to run under binary translation).
 set -u
 APK="${1:?apk}"
+COMPAT_APK="${2:-}"
 PKG=com.aldiian.naruto5
 OUT=smoke-out
 mkdir -p "$OUT"
@@ -73,6 +74,14 @@ if [ -s "$OUT/pid.txt" ]; then note "PASS: app still running (pid $(cat "$OUT/pi
 # runVMThread, VMManager init with BIOS + disc, GS device creation, and orderly error reporting.
 python3 tools/make_test_bios.py "$OUT/smoke-bios.bin"
 adb push "$OUT/smoke-bios.bin" /sdcard/Naruto5/BIOS/smoke-bios.bin
+if [ -n "$COMPAT_APK" ]; then
+  # The x86 emulator's ARM64 translator does not implement every ARMv8.2 instruction the main
+  # (Snapdragon 870-tuned) build uses, so the boot phase runs the ARMv8.0 compat build of the same
+  # code. Same signing key: installed over the main build, data kept.
+  note "INFO phase 2 uses $(basename "$COMPAT_APK")"
+  adb install -r "$COMPAT_APK" | tee -a "$OUT/install.txt"
+  adb shell am start -W -n $PKG/.ui.MainActivity; sleep 20
+fi
 tap_text "Beranda"; sleep 3
 tap_text "Pindai ulang"; sleep 15
 adb exec-out screencap -p > "$OUT/6-beranda-siap.png"
@@ -88,6 +97,7 @@ info "VMManager initialised the VM (VM INIT)" "VM INIT"
 info "VM produced frames" "Game berjalan"
 info "VM exited with a reported error" "VM selesai"
 grep -E "Fatal signal|SIGILL|SIGSEGV|backtrace" "$OUT/logcat.txt" | head -5 | while read -r l; do note "INFO crash line: $l"; done
+{ echo "---- native crash backtrace (if any) ----"; grep -E " F/DEBUG" "$OUT/logcat.txt" | head -60; } >> "$SUMMARY"
 adb shell pidof $PKG:emu > "$OUT/emu-pid.txt" || true
 
 {

@@ -55,11 +55,23 @@ jobs:
   # Full build: compiles the ARMSX2 PS2 core (EE/IOP/VU ARM64 JIT, GS Vulkan/GL, SPU2...) with
   # the NDK and packages the installable, signed release APK.
   apk:
-    name: Release APK (arm64-v8a, native core)
-    # The ~1 h native build runs for main, PRs and manual runs; `dev` pushes get the fast lane only.
+    name: Release APK (${{ matrix.variant }})
+    # The native build runs for main, PRs and manual runs; `dev` pushes get the fast lane only.
     if: github.ref != 'refs/heads/dev'
     runs-on: ubuntu-24.04
     timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Main build, tuned for Snapdragon 870 (Xiaomi Pad 6): ARMv8.2-A + FP16 + DotProd.
+          - variant: pad6
+            march: armv8.2-a+fp16+dotprod
+            suffix: arm64
+          # Compatibility build: plain ARMv8.0 (Cortex-A53+) with outline atomics.
+          - variant: compat
+            march: armv8-a
+            suffix: arm64-armv8.0-compat
     steps:
       - name: Free disk space
         run: |
@@ -102,10 +114,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ccache
-          key: ccache-${{ steps.core.outputs.sha }}-${{ hashFiles('app/build.gradle.kts') }}-${{ github.run_id }}
+          key: ccache-${{ matrix.variant }}-${{ steps.core.outputs.sha }}-${{ hashFiles('app/build.gradle.kts') }}-${{ github.run_id }}
           restore-keys: |
-            ccache-${{ steps.core.outputs.sha }}-${{ hashFiles('app/build.gradle.kts') }}-
-            ccache-${{ steps.core.outputs.sha }}-
+            ccache-${{ matrix.variant }}-${{ steps.core.outputs.sha }}-${{ hashFiles('app/build.gradle.kts') }}-
+            ccache-${{ matrix.variant }}-${{ steps.core.outputs.sha }}-
+            ccache-${{ matrix.variant }}-
             ccache-
 
       # The core submodule vendors third-party Android sample projects with their own wrapper
@@ -124,6 +137,7 @@ jobs:
           ccache -z
           ./gradlew --stacktrace --continue \
             -Pnaruto5.ccache=true \
+            -Pnaruto5.march=${{ matrix.march }} \
             -Pnaruto5.versionCode=${{ github.run_number }} \
             -Pnaruto5.versionName=1.0.${{ github.run_number }} \
             -Pnaruto5.coreCommit=${{ steps.core.outputs.short }} \
@@ -135,7 +149,7 @@ jobs:
         run: |
           APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
           test -n "$APK"
-          OUT="NarutoUltimate5-1.0.${{ github.run_number }}-arm64.apk"
+          OUT="NarutoUltimate5-1.0.${{ github.run_number }}-${{ matrix.suffix }}.apk"
           mkdir -p dist && cp "$APK" "dist/$OUT"
           echo "name=$OUT" >> "$GITHUB_OUTPUT"
           echo "### APK" >> "$GITHUB_STEP_SUMMARY"
@@ -149,16 +163,28 @@ jobs:
           path: dist/*.apk
           if-no-files-found: error
 
-      - name: Publish GitHub release
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
+  release:
+    name: Publish GitHub release
+    needs: apk
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: NarutoUltimate5-*
+          merge-multiple: true
+          path: dist
+
+      - uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: NarutoUltimate 5 v1.0.${{ github.run_number }}
           body: |
-            Build otomatis dari commit ${{ github.sha }} (core ARMSX2 ${{ steps.core.outputs.short }}).
-            Pasang APK di bawah pada perangkat Android ARM64 (target: Xiaomi Pad 6).
-            File game (ISO Naruto Shippuden: Ultimate Ninja 5) dan BIOS PS2 Anda sendiri wajib disediakan.
+            Build otomatis dari commit ${{ github.sha }}.
+            - `NarutoUltimate5-1.0.${{ github.run_number }}-arm64.apk` — **utama**, dioptimalkan untuk Xiaomi Pad 6 / Snapdragon 870 (ARMv8.2).
+            - `NarutoUltimate5-1.0.${{ github.run_number }}-arm64-armv8.0-compat.apk` — kompatibilitas untuk CPU ARMv8.0 lama (sedikit lebih lambat).
+            File game (ISO Naruto Shippuden: Ultimate Ninja 5) dan BIOS PS2 milik Anda sendiri wajib disediakan.
+            Hasil smoke test (emulator Android) dan screenshot dilampirkan di bawah setelah job smoke selesai.
           files: dist/*.apk
           make_latest: true
 
@@ -168,7 +194,8 @@ jobs:
   # Screenshots of every launcher tab are uploaded as an artifact.
   smoke:
     name: Device smoke test (emulator)
-    needs: apk
+    needs: [apk, release]
+    if: always() && needs.apk.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -195,7 +222,7 @@ jobs:
           disk-size: 6000M
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
-          script: bash tools/smoke-test.sh "$(ls dist/*.apk | head -1)"
+          script: bash tools/smoke-test.sh "$(ls dist/*-arm64.apk | head -1)" "$(ls dist/*-compat.apk | head -1)"
 
       - name: Attach smoke results to the release
         if: always() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'

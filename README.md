@@ -12,7 +12,8 @@ ARM64** untuk EE (MIPS R5900), IOP (R3000), VU0 dan VU1 — yang dikompilasi dar
 > **Status jujur, baca dulu:**
 > - Ini **emulasi dengan dynamic recompilation (JIT)**, **bukan static recompilation**. Lihat
 >   [Backend](#backend-emulasi-jit-vs-static-recompilation).
-> - APK dibangun dan diuji otomatis di GitHub Actions (tes unit + build native lengkap). Saya tidak
+> - APK dibangun dan diuji otomatis di GitHub Actions (tes unit, build native lengkap, smoke test di
+>   emulator Android — lihat [Pengujian](#pengujian)). Saya tidak
 >   punya perangkat fisik maupun file game/BIOS, jadi **boot game Naruto UN5 sungguhan belum diuji
 >   oleh saya di Xiaomi Pad 6**. Core yang dipakai adalah emulator yang memang menjalankan game ini
 >   (GameDB PCSX2: status *Playable* untuk SLES-55605), tetapi hasil akhir di perangkat Anda perlu
@@ -30,7 +31,8 @@ ARM64** untuk EE (MIPS R5900), IOP (R3000), VU0 dan VU1 — yang dikompilasi dar
 4. Buka aplikasi → **Beri akses semua file** → aplikasi otomatis memindai, memasang BIOS, dan
    memvalidasi game → tekan **▶ PLAY**.
 
-Aplikasi ini **tidak menyertakan** game, BIOS, atau aset berhak cipta apa pun.
+Aplikasi ini **tidak menyertakan** file game maupun BIOS (logo/ikon adalah gambar yang disediakan
+pemilik repo).
 
 Update: semua build ditandatangani dengan kunci yang sama (`keystore/naruto5-sideload.jks`), jadi
 APK baru bisa dipasang menimpa yang lama tanpa menghapus data.
@@ -149,7 +151,7 @@ cd NarutoUltimate-5-Recompile-
 python3 core/platforms/android/app/src/main/cpp/3rdparty/shaderc/utils/git-sync-deps
 rustup target add aarch64-linux-android
 ./gradlew :app:testDebugUnitTest          # tes unit (tanpa perangkat)
-./gradlew :app:assembleRelease            # APK lengkap dengan core native (~45–60 menit pertama kali)
+./gradlew :app:assembleRelease            # APK lengkap dengan core native (~20 menit pertama kali di runner GitHub, ~13 menit dengan ccache)
 ```
 
 - `-Pnaruto5.skipNative=true` — kompilasi UI saja (APK tidak bisa menjalankan game).
@@ -159,6 +161,17 @@ rustup target add aarch64-linux-android
 
 CI (`.github/workflows/build-apk.yml`): job *tests* (tes unit + kompilasi app) dan job *apk*
 (core native + APK release bertanda tangan, artefak, dan GitHub Release otomatis di `main`).
+
+## Pengujian
+
+| Lapisan | Apa yang dites | Di mana |
+|---|---|---|
+| Unit (JVM) | Parser ISO 9660 (ISO 2048 & BIN 2352), `SYSTEM.CNF`, serial, ELF, deteksi file terpotong, PS1, CHD/CSO/ZSO; pemetaan pengaturan → kunci core; preset; tata letak sentuh; pemetaan gamepad; editor INI | `app/src/test`, job CI *tests* |
+| Build | Kompilasi core ARMSX2 penuh dengan NDK + APK release bertanda tangan | job CI *apk* |
+| Perangkat (emulator Android 14 x86_64 + translasi ARM64) | APK terpasang; `libemucore_4k.so` termuat; `NativeApp.initialize` + resource core; ISO sintetis terdeteksi `SLES-55605`, valid, dikenal GameDB core; BIOS palsu ditolak parser core; folder memcard/state core = `/storage/emulated/0/Naruto5/Save`; screenshot semua tab; fase boot VM (PLAY → `EmulationActivity` → `runVMThread`) dicatat sebagai info | `tools/smoke-test.sh`, job CI *smoke*; hasil + screenshot dilampirkan di setiap GitHub Release |
+
+Tes perangkat memakai image dan BIOS **sintetis** (`tools/make_test_iso.py`, `tools/make_test_bios.py`),
+bukan data Sony/Bandai Namco, sehingga tidak bisa membuktikan gameplay.
 
 ## Struktur kode
 
