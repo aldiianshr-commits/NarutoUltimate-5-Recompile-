@@ -197,6 +197,14 @@ jobs:
           disable-animations: true
           script: bash tools/smoke-test.sh "$(ls dist/*.apk | head -1)"
 
+      - name: Attach smoke results to the release
+        if: always() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls smoke-out || exit 0
+          gh release upload "v1.0.${{ github.run_number }}" smoke-out/*.png smoke-out/smoke-summary.txt --clobber -R "${{ github.repository }}" || true
+
       - name: Upload smoke results
         if: always()
         uses: actions/upload-artifact@v4

@@ -42,6 +42,12 @@ object CoreRuntime {
         if (gpu.renderer.isNotBlank()) NativeApp.setAutoRendererGpuStrings(gpu.vendor, gpu.renderer, gpu.version)
 
         NativeApp.initialize(dataRoot.absolutePath, Paths.biosDir(ctx).absolutePath, Build.VERSION.SDK_INT)
+        // Same JNI bring-up the ARMSX2 frontend performs after initialize: SDL's Java side must be
+        // wired even though this app feeds the pad itself (SDL is linked into the core).
+        runCatching {
+            org.libsdl.app.SDLControllerManager.nativeSetupJNI()
+            org.libsdl.app.SDLControllerManager.initialize()
+        }.onFailure { AppLog.w("SDL JNI setup: ${it.message}") }
         // Folders: memory cards and save states go to the user-visible save folder.
         set("Folders", "Bios", "string", Paths.biosDir(ctx).absolutePath)
         set("Folders", "MemoryCards", "string", Paths.memcardDir(ctx).absolutePath)

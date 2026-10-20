@@ -13,7 +13,10 @@ PKG=com.aldiian.naruto5
 OUT=smoke-out
 mkdir -p "$OUT"
 fail=0
-check() { if grep -q -E "$2" "$OUT/logcat.txt"; then echo "PASS: $1"; else echo "FAIL: $1"; fail=1; fi; }
+SUMMARY="$OUT/smoke-summary.txt"
+: > "$SUMMARY"
+note() { echo "$1" | tee -a "$SUMMARY"; echo "::notice title=smoke::$1"; }
+check() { if grep -q -E "$2" "$OUT/logcat.txt"; then note "PASS: $1"; else note "FAIL: $1"; fail=1; fi; }
 
 adb shell getprop ro.product.cpu.abilist | tee "$OUT/abilist.txt"
 adb shell wm size 2880x1800 && adb shell wm density 320   # Xiaomi Pad 6-like 16:10 landscape
@@ -58,8 +61,15 @@ check "scanner found the disc as SLES-55605" "Game: Naruto5-smoke.iso serial=SLE
 check "disc validated as playable" "serial=SLES-55605 .*playable=true"
 check "core GameDB knows UN5 (compat > 0)" "serial=SLES-55605 .*compat=[1-6]"
 check "core BIOS parser rejected an invalid BIOS" "BIOS ditolak"
-if grep -q "Core native gagal dimuat" "$OUT/logcat.txt"; then echo "FAIL: native library failed to load"; fail=1; fi
-if grep -E "FATAL EXCEPTION|Fatal signal" "$OUT/logcat.txt" | grep -q -i naruto5; then echo "FAIL: crash"; fail=1; fi
-if [ -s "$OUT/pid.txt" ]; then echo "PASS: app still running"; else echo "FAIL: app process died"; fail=1; fi
-grep -E "Naruto5|ARMSX2|PCSX2|emucore" "$OUT/logcat.txt" | head -80
+if grep -q "Core native gagal dimuat" "$OUT/logcat.txt"; then note "FAIL: native library failed to load"; fail=1; fi
+if grep -E "FATAL EXCEPTION|Fatal signal" "$OUT/logcat.txt" | grep -q -i naruto5; then note "FAIL: crash"; fail=1; fi
+if [ -s "$OUT/pid.txt" ]; then note "PASS: app still running (pid $(cat "$OUT/pid.txt"))"; else note "FAIL: app process died"; fail=1; fi
+{
+  echo; echo "abilist: $(cat "$OUT/abilist.txt")"
+  echo "---- app log (tag Naruto5) ----"
+  grep -E " I/Naruto5| W/Naruto5| E/Naruto5" "$OUT/logcat.txt" | head -60
+  echo "---- core log excerpt ----"
+  grep -E "ARMSX2|PCSX2|GameDB|Resources|BIOS Directory|MemoryCards Directory|Savestates Directory" "$OUT/logcat.txt" | head -40
+} >> "$SUMMARY"
+cat "$SUMMARY"
 exit $fail
